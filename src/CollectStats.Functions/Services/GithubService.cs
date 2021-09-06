@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace CollectStats_Functions.Services
 {
-    public class GithubService : IGetFromGithub
+    public class GithubService : IGetStats<GithubLanguageStat>
     {
         private readonly AppOptions _appOptions;
         private readonly ILogger<GithubService> _logger;
@@ -63,17 +63,18 @@ namespace CollectStats_Functions.Services
             foreach (var repo in await appClient.Repository.GetAllForOrg(org))
             {
                 var languages = await appClient.Repository.GetAllLanguages(org, repo.Name);
-                var stats = languages.Select(l => new GithubLanguageStat(org, repo.Name, l.Name, l.NumberOfBytes, DateTimeOffset.UtcNow));
+                var stats = languages.Select(l => new GithubLanguageStat
+                {
+                    Repository = repo.Name,
+                    LanguageBytes = l.NumberOfBytes,
+                    Organization = org,
+                    LanguageName = l.Name,
+                    Date = DateTimeOffset.UtcNow
+                });
                 results.AddRange(stats);
             }
-            
+
             return results;
         }
-
-    }
-
-    public interface IGetFromGithub
-    {
-        Task<IEnumerable<GithubLanguageStat>> GetStats(string org);
     }
 }

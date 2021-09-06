@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace CollectStats_Functions.Services
 {
-    public class AzDOService : IGetFromAzdo
+    public class AzDOService : IGetStats<AzdoLanguageStat>
     {
         private readonly AppOptions _appOptions;
         private readonly ILogger<AzDOService> _logger;
@@ -50,7 +50,7 @@ namespace CollectStats_Functions.Services
             return await response.Content.ReadAsAsync<LanguageDistributionResponse>();
         }
 
-        public async Task<List<AzdoLanguageStat>> GetLanguageStats(string organization)
+        public async Task<IEnumerable<AzdoLanguageStat>> GetStats(string organization)
         {
             var accessToken = await GetAccessToken(_appOptions.AzureTokenProviderString, _appOptions.TenantId);
             using var client = new HttpClient();
@@ -70,15 +70,21 @@ namespace CollectStats_Functions.Services
                 var languages = projectStats.dataProviders?
                                             .ProjectLanguagesDataProvider?
                                             .projectLanguages?
-                                            .languages?.Select(l => new AzdoLanguageStat(organization, project, l.name, l.languagePercentage, now));
+                                            .languages?.Select(l => new AzdoLanguageStat
+                                            {
+                                                Organization = organization,
+                                                ProjectName = project,
+                                                LanguageName = l.name,
+                                                LanguagePercentage = l.languagePercentage,
+                                                Date = now
+                                            });
                 if (languages != null) stats.AddRange(languages);
             }
             return stats;
         }
     }
-
-    public interface IGetFromAzdo
+    public interface IGetStats<T>
     {
-        Task<List<AzdoLanguageStat>> GetLanguageStats(string organization);
+        Task<IEnumerable<T>> GetStats(string organization);
     }
 }

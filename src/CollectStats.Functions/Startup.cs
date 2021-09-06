@@ -18,8 +18,8 @@ namespace CollectStats_Functions
                 configuration.GetSection("AppOptions").Bind(settings);
             });
 
-            builder.Services.AddTransient<IGetFromGithub, GithubService>();
-            builder.Services.AddTransient<IGetFromAzdo, AzDOService>();
+            builder.Services.AddTransient<IGetStats<GithubLanguageStat>, GithubService>();
+            builder.Services.AddTransient<IGetStats<AzdoLanguageStat>, AzDOService>();
         }
     }
 }
