@@ -74,6 +74,6 @@ namespace CollectStats_Functions.Services
 
     public interface IGetFromGithub
     {
-        Task<IEnumerable<RepositoryLanguage>> GetStats(string org);
+        Task<IEnumerable<GithubLanguageStat>> GetStats(string org);
     }
 }

@@ -1,4 +1,5 @@
 ﻿using CollectStats_Functions;
+using CollectStats_Functions.Models;
 using CollectStats_Functions.Services;
 using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -18,6 +19,7 @@ namespace CollectStats_Functions
             });
 
             builder.Services.AddTransient<IGetFromGithub, GithubService>();
+            builder.Services.AddTransient<IGetFromAzdo, AzDOService>();
         }
     }
 }
