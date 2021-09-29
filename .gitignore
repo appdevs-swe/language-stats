@@ -16,6 +16,9 @@
 # Mono auto generated files
 mono_crash.*
 
+__azurite_*
+__blobstorage*
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
