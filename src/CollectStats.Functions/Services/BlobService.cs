@@ -13,7 +13,7 @@ namespace CollectStats_Functions.Services
         {
             var jsonStream = new MemoryStream(data);
             await bcClient.CreateIfNotExistsAsync();
-            var blobClient = bcClient.GetBlobClient($"{prefix}-{DateTimeOffset.UtcNow.Date.ToShortDateString()}.json");
+            var blobClient = bcClient.GetBlobClient($"{prefix}-{DateTimeOffset.UtcNow.Date.ToShortDateString()}-{Guid.NewGuid()}.json");
             await blobClient.UploadAsync(jsonStream);
         }
     }

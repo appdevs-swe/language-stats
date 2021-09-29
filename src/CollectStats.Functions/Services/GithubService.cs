@@ -5,12 +5,16 @@ using Octokit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
+using GraphQL.Client.Http;
+using GraphQL.Client.Serializer.SystemTextJson;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using GraphQL;
 
 namespace CollectStats_Functions.Services
 {
-    public class GithubService : IGetStats<GithubLanguageStat>
+    public class GithubService : IGetStats<GithubLanguageStat>, IGetDependencies<GithubDependency>
     {
         private readonly AppOptions _appOptions;
         private readonly ILogger<GithubService> _logger;
@@ -40,7 +44,7 @@ namespace CollectStats_Functions.Services
         {
             var jwtToken = GetJwtFromApp();
             // Use the JWT as a Bearer token
-            var appClient = new GitHubClient(new ProductHeaderValue("local-app"))
+            var appClient = new GitHubClient(new Octokit.ProductHeaderValue("local-app"))
             {
                 Credentials = new Credentials(jwtToken, AuthenticationType.Bearer)
             };
@@ -48,13 +52,41 @@ namespace CollectStats_Functions.Services
             var response = await appClient.GitHubApps.CreateInstallationToken(_appOptions.GithubAppInstallationId);
 
             // Create a new GitHubClient using the installation token as authentication
-            var installationClient = new GitHubClient(new ProductHeaderValue($"local-Installation-{_appOptions.GithubAppInstallationId}"))
+            var installationClient = new GitHubClient(new Octokit.ProductHeaderValue($"local-Installation-{_appOptions.GithubAppInstallationId}"))
             {
                 Credentials = new Credentials(response.Token)
             };
 
             return installationClient;
         }
+
+        private async Task<GraphQLHttpClient> GetGraphQlClient()
+        {
+            var jwtToken = GetJwtFromApp();
+
+            // Use the JWT as a Bearer token
+            var appClient = new GitHubClient(new Octokit.ProductHeaderValue("local-app"))
+            {
+                Credentials = new Credentials(jwtToken, AuthenticationType.Bearer)
+            };
+
+            var response = await appClient.GitHubApps.CreateInstallationToken(_appOptions.GithubAppInstallationId);
+            var options = new GraphQLHttpClientOptions
+            {
+                MediaType = @"application/vnd.github.hawkgirl-preview+json",
+                EndPoint = new Uri("https://api.github.com/graphql"),
+            };
+
+            var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", response.Token);
+            httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(@"application/vnd.github.hawkgirl-preview+json"));
+
+            var graphQLClient = new GraphQLHttpClient(options, new SystemTextJsonSerializer(), httpClient);
+            return graphQLClient;
+        }
+
+
+
 
         public async Task<IEnumerable<GithubLanguageStat>> GetStats(string org)
         {
@@ -74,6 +106,57 @@ namespace CollectStats_Functions.Services
                 results.AddRange(stats);
             }
 
+            return results;
+        }
+
+
+        private async Task<RepoDependenciesResponse> GetDependencies(GraphQLHttpClient client, string org, string repo)
+        {
+            var query = new GraphQLRequest { Query = $@" {{
+                              repository(owner: ""{org}"", name:""{repo}"") {{
+                                dependencyGraphManifests {{
+                                            nodes {{
+                                                blobPath
+                                              dependencies(first: 100) {{
+                                                    nodes {{
+                                                        packageName
+                                                        requirements
+                                                        hasDependencies
+                                                        repository {{
+                                                            nameWithOwner
+                                                        }}
+                                                        packageManager
+                                                    }}
+                                                }}
+                                            }}
+                                        }}
+                                    }}
+                                }}" };
+
+            
+            var result = await client.SendQueryAsync<RepoDependenciesResponse>(query);
+            return result.Data;
+        }
+
+        public async Task<IEnumerable<GithubDependency>> GetDependencies(string org)
+        {
+            var appClient = await GetInstallationClient();
+            var results = new List<GithubDependency>();
+            var graphClient = await GetGraphQlClient();    
+            foreach (var repo in await appClient.Repository.GetAllForOrg(org))
+            {
+                var response = await GetDependencies(graphClient, org, repo.Name);
+                var deps = response.repository.dependencyGraphManifests.nodes.SelectMany(d => d.dependencies.nodes.Select( n => new GithubDependency
+                {
+                    Organization = org,
+                    Repository = repo.Name,
+                    PackageManager = n.packageManager,
+                    PackageName = n.packageName,
+                    PackageVersion = n.requirements,
+                    PackagesSource = d.blobPath
+                }));
+                results.AddRange(deps);
+            }
             return results;
         }
     }

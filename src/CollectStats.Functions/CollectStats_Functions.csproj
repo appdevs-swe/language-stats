@@ -16,6 +16,8 @@
     <PackageReference Include="Octokit" Version="0.50.0" />
     <PackageReference Include="GitHubJwt" Version="0.0.5" />
     <PackageReference Include="System.Text.Encodings.Web" Version="5.0.1" />
+    <PackageReference Include="GraphQL.Client.Serializer.SystemTextJson" Version="3.2.4" />
+    <PackageReference Include="GraphQL.Client" Version="3.2.4" />
   </ItemGroup>
   <ItemGroup>
     <FunctionsPreservedDependencies Include="System.Text.Encodings.Web.dll" />

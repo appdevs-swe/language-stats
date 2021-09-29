@@ -19,6 +19,7 @@ namespace CollectStats_Functions
             });
 
             builder.Services.AddTransient<IGetStats<GithubLanguageStat>, GithubService>();
+            builder.Services.AddTransient<IGetDependencies<GithubDependency>, GithubService>();
             builder.Services.AddTransient<IGetStats<AzdoLanguageStat>, AzDOService>();
         }
     }

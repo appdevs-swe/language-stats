@@ -1,15 +1,14 @@
 ﻿using CollectStats_Functions.Models;
-using Microsoft.Azure.Services.AppAuthentication;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.TeamFoundation.Core.WebApi;
-using Microsoft.VisualStudio.Services.OAuth;
-using Microsoft.VisualStudio.Services.WebApi;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading.Tasks;
+using System.Text;
+
 
 namespace CollectStats_Functions.Services
 {
@@ -17,6 +16,7 @@ namespace CollectStats_Functions.Services
     {
         private readonly AppOptions _appOptions;
         private readonly ILogger<AzDOService> _logger;
+        private readonly string ApiVersion = "6.1-preview";
 
         public AzDOService(IOptions<AppOptions> options, ILogger<AzDOService> logger)
         {
@@ -24,46 +24,40 @@ namespace CollectStats_Functions.Services
             _logger = logger;
         }
 
-        //https://github.com/microsoft/azure-devops-auth-samples/blob/master/ManagedClientConsoleAppSample/Program.cs#L19
-        // constant ResourceId for Azure DevOps, go figure
-        private static string Resource = "499b84ac-1321-427f-aa17-267ca6975798";
-
-        private async Task<string> GetAccessToken(string providerString, string tenant)
+        private async Task<AzdoProjects> GetProjects(HttpClient client, string orgUrl)
         {
-            var azureServiceTokenProvider = new AzureServiceTokenProvider(providerString);
-            return await azureServiceTokenProvider.GetAccessTokenAsync(Resource, tenant);
-        }
-
-        private async Task<IEnumerable<string>> GetProjects(string accessToken, string orgUrl)
-        {
-            var connection = new VssConnection(new Uri(orgUrl), new VssOAuthAccessTokenCredential(accessToken));
-            using var client = connection.GetClient<ProjectHttpClient>();
-            var projects = await client.GetProjects();
-            return projects.Select(a => a.Name);
+            var url = $"{orgUrl}/_apis/projects?api-version={ApiVersion}";
+            var response = await client.GetAsync(url);
+            return await response.Content.ReadAsAsync<AzdoProjects>();
         }
 
         private async Task<LanguageDistributionResponse> FetchProjectStats(HttpClient client, string orgUrl, LanguageDistributionRequest body)
         {
             var project = body.dataProviderContext.properties.sourcePage.routeValues.project;
-            var url = $"{orgUrl}/_apis/Contribution/HierarchyQuery/project/{project}?api-version=6.1-preview";
+            var url = $"{orgUrl}/_apis/Contribution/HierarchyQuery/project/{project}?api-version={ApiVersion}";
             var response = await client.PostAsJsonAsync(url, body);
             return await response.Content.ReadAsAsync<LanguageDistributionResponse>();
         }
 
         public async Task<IEnumerable<AzdoLanguageStat>> GetStats(string organization)
         {
-            var accessToken = await GetAccessToken(_appOptions.AzureTokenProviderString, _appOptions.TenantId);
             using var client = new HttpClient();
-            client.DefaultRequestHeaders.Add("Accept", "application/json");
-            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
+
+            client.DefaultRequestHeaders.Accept.Add(
+                new MediaTypeWithQualityHeaderValue("application/json"));
+
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
+                Convert.ToBase64String(
+                    ASCIIEncoding.ASCII.GetBytes(
+                        string.Format("{0}:{1}", "", _appOptions.AzdoPAT))));
 
             var stats = new List<AzdoLanguageStat>();
             var now = DateTimeOffset.UtcNow;
             // Get All Projects for Organization
             var orgUrl = $"https://dev.azure.com/{organization}";
-            var projectNames = await GetProjects(accessToken, orgUrl);
+            var projects = await GetProjects(client, orgUrl);
             // Get Stats for Project
-            foreach (var project in projectNames)
+            foreach (var project in projects.value.Select(a=>a.name))
             {
                 var body = LanguageDistributionRequest.Create(project);
                 var projectStats = await FetchProjectStats(client, orgUrl, body);
@@ -86,5 +80,10 @@ namespace CollectStats_Functions.Services
     public interface IGetStats<T>
     {
         Task<IEnumerable<T>> GetStats(string organization);
+    }
+
+    public interface IGetDependencies<T>
+    {
+        Task<IEnumerable<T>> GetDependencies(string organization);
     }
 }
